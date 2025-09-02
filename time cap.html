@@ -1,0 +1,296 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Advanced Time Zone Converter</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            background-color: #eafbea;
+            margin: 0;
+            padding: 0;
+        }
+        .container {
+            max-width: 500px;
+            margin: auto;
+            background: #fff;
+            border-radius: 15px;
+            padding: 25px;
+            margin-top: 30px;
+            box-shadow: 0 4px 12px rgba(0,0,0,0.15);
+        }
+        h2 {
+            text-align: center;
+            color: #2e7d32;
+        }
+        label {
+            display: block;
+            margin-top: 10px;
+            margin-bottom: 5px;
+            color: #388e3c;
+            font-weight: bold;
+        }
+        input, select {
+            width: 100%;
+            padding: 10px;
+            margin-bottom: 15px;
+            border-radius: 8px;
+            border: 1px solid #a5d6a7;
+            font-size: 16px;
+            box-sizing: border-box;
+        }
+        button {
+            width: 100%;
+            padding: 10px;
+            border: none;
+            border-radius: 8px;
+            background-color: #4CAF50;
+            color: white;
+            font-size: 16px;
+            cursor: pointer;
+            margin-top: 10px;
+        }
+        button:hover {
+            background-color: #45a049;
+        }
+        .swap-button {
+            background-color: #007BFF;
+            margin-bottom: 15px;
+        }
+        .swap-button:hover {
+            background-color: #0069d9;
+        }
+        .result {
+            margin-top: 15px;
+            font-size: 18px;
+            font-weight: bold;
+            color: #1b5e20;
+        }
+        .world-clock {
+            margin-top: 20px;
+            padding: 10px;
+            border-top: 1px solid #a5d6a7;
+        }
+        .clock {
+            display: flex;
+            justify-content: space-between;
+            padding: 5px 0;
+        }
+        @media (max-width: 600px) {
+            .container {
+                margin: 15px;
+                padding: 15px;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h2>Advanced Time Zone Converter</h2>
+
+        <div id="currentTimeFromZone"></div>
+
+        <label for="date">Select Date:</label>
+        <input type="date" id="date">
+
+        <label for="time">Select Time:</label>
+        <input type="time" id="time">
+
+        <label for="from">From Time Zone / City:</label>
+        <select id="from"></select>
+
+        <label for="to">To Time Zone / City:</label>
+        <select id="to"></select>
+        
+        <button id="swapButton" class="swap-button">Swap Time Zones</button>
+
+        <div class="result" id="result"></div>
+
+        <div class="world-clock" id="worldClock">
+            <h3>World Clock</h3>
+        </div>
+    </div>
+    
+    <script>
+        const API_KEY = "RKUS3G225UPZ"; // Your TimeZoneDB API key
+
+        const cityMap = {
+            "New York": "America/New_York",
+            "Los Angeles": "America/Los_Angeles",
+            "Chicago": "America/Chicago",
+            "Toronto": "America/Toronto",
+            "London": "Europe/London",
+            "Paris": "Europe/Paris",
+            "Berlin": "Europe/Berlin",
+            "Rome": "Europe/Rome",
+            "Milan": "Europe/Rome",
+            "Tokyo": "Asia/Tokyo",
+            "Dubai": "Asia/Dubai",
+            "Colombo": "Asia/Colombo",
+            "New Zealand": "Pacific/Auckland",
+            "Sydney": "Australia/Sydney",
+            "Hong Kong": "Asia/Hong_Kong",
+            "Singapore": "Asia/Singapore",
+            "India": "Asia/Kolkata"
+        };
+
+        const worldCities = ["America/New_York", "Europe/London", "Europe/Rome", "Asia/Colombo", "Australia/Sydney", "Asia/Tokyo"];
+
+        const fromSelect = document.getElementById("from");
+        const toSelect = document.getElementById("to");
+        const dateInput = document.getElementById("date");
+        const timeInput = document.getElementById("time");
+        const resultDiv = document.getElementById("result");
+        const swapButton = document.getElementById("swapButton");
+        const currentTimeFromZoneDiv = document.getElementById("currentTimeFromZone");
+
+        function populateDropdowns() {
+            for (const city in cityMap) {
+                const optionFrom = document.createElement("option");
+                optionFrom.value = cityMap[city];
+                optionFrom.textContent = city;
+                fromSelect.appendChild(optionFrom);
+
+                const optionTo = document.createElement("option");
+                optionTo.value = cityMap[city];
+                optionTo.textContent = city;
+                toSelect.appendChild(optionTo);
+            }
+        }
+
+        async function convertTime() {
+            const fromZone = fromSelect.value;
+            const toZone = toSelect.value;
+            const dateValue = dateInput.value;
+            const timeValue = timeInput.value;
+
+            if (!fromZone || !toZone || !dateValue || !timeValue) {
+                resultDiv.innerHTML = "Please select a date, time, and both time zones.";
+                return;
+            }
+
+            const [hours, minutes] = timeValue.split(":");
+            const baseDate = new Date(`${dateValue}T${timeValue}:00`);
+
+            try {
+                const sourceTime = new Date(baseDate.toLocaleString("en-US", { timeZone: fromZone }));
+                const targetTimeObj = new Date(baseDate.toLocaleString("en-US", { timeZone: toZone }));
+
+                const options = {
+                    timeZone: toZone,
+                    hour: "2-digit",
+                    minute: "2-digit",
+                    hour12: true,
+                    weekday: "short",
+                    year: "numeric",
+                    month: "short",
+                    day: "numeric"
+                };
+                const targetTime = targetTimeObj.toLocaleString("en-US", options);
+
+                const diffHours = (targetTimeObj - sourceTime) / (1000 * 60 * 60);
+                const diffText = diffHours > 0 ? `+${diffHours.toFixed(1)} hrs` : `${diffHours.toFixed(1)} hrs`;
+
+                const hour = targetTimeObj.getHours();
+                const dayNight = hour >= 6 && hour < 18 ? "Day 🌞" : "Night 🌜";
+
+                resultDiv.innerHTML = `⏰ <b>${targetTime}</b> in <b>${toZone}</b> (${dayNight}) <br>Time Difference: ${diffText}`;
+            } catch (e) {
+                resultDiv.innerHTML = "❌ Invalid city or time zone.";
+            }
+        }
+
+        function updateCurrentFromTime() {
+            const fromZone = fromSelect.value;
+            if (fromZone) {
+                const now = new Date();
+                const options = {
+                    timeZone: fromZone,
+                    hour: "2-digit",
+                    minute: "2-digit",
+                    second: "2-digit",
+                    weekday: "short",
+                    year: "numeric",
+                    month: "short",
+                    day: "numeric"
+                };
+                const currentTime = now.toLocaleString("en-US", options);
+                currentTimeFromZoneDiv.innerHTML = `<p>Current time in <b>${fromZone}</b>: <b>${currentTime}</b></p>`;
+            } else {
+                currentTimeFromZoneDiv.innerHTML = "";
+            }
+        }
+
+        function updateWorldClock() {
+            const clockDiv = document.getElementById("worldClock");
+            clockDiv.innerHTML = "<h3>World Clock</h3>";
+            worldCities.forEach(city => {
+                try {
+                    const now = new Date();
+                    const options = {
+                        timeZone: city,
+                        hour12: true,
+                        hour: "2-digit",
+                        minute: "2-digit"
+                    };
+                    const cityTime = now.toLocaleTimeString("en-US", options);
+
+                    const hourOptions = {
+                        timeZone: city,
+                        hour12: false,
+                        hour: "numeric"
+                    };
+                    const hour = parseInt(now.toLocaleString("en-US", hourOptions));
+                    const dayNight = hour >= 6 && hour < 18 ? "Day 🌞" : "Night 🌜";
+
+                    const div = document.createElement("div");
+                    div.className = "clock";
+                    div.innerHTML = `<span>${city}</span><span>${cityTime} (${dayNight})</span>`;
+                    clockDiv.appendChild(div);
+                } catch (e) {
+                    console.error("Error with city:", city, e);
+                }
+            });
+        }
+
+        function swapTimeZones() {
+            const fromValue = fromSelect.value;
+            const toValue = toSelect.value;
+            fromSelect.value = toValue;
+            toSelect.value = fromValue;
+            convertTime();
+            updateCurrentFromTime();
+        }
+
+        // Initial setup and event listeners
+        window.onload = () => {
+            populateDropdowns();
+            updateWorldClock();
+            setInterval(updateWorldClock, 1000);
+            setInterval(updateCurrentFromTime, 1000);
+
+            // Set initial values
+            const userTimeZone = Intl.DateTimeFormat().resolvedOptions().timeZone;
+            const userCityEntry = Object.entries(cityMap).find(([city, zone]) => zone === userTimeZone);
+            if (userCityEntry) {
+                fromSelect.value = userTimeZone;
+            }
+            dateInput.valueAsDate = new Date();
+            timeInput.value = new Date().toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', hour12: false });
+            
+            convertTime();
+            updateCurrentFromTime();
+        };
+
+        fromSelect.addEventListener("change", () => {
+            convertTime();
+            updateCurrentFromTime();
+        });
+        toSelect.addEventListener("change", convertTime);
+        dateInput.addEventListener("input", convertTime);
+        timeInput.addEventListener("input", convertTime);
+        swapButton.addEventListener("click", swapTimeZones);
+    </script>
+</body>
+</html>
