@@ -12,7 +12,7 @@
       padding: 0;
     }
     .container {
-      max-width: 500px;
+      max-width: 600px;
       margin: auto;
       background: #fff;
       border-radius: 15px;
@@ -67,6 +67,22 @@
       font-weight: bold;
       color: #1b5e20;
     }
+    .current-time {
+      margin: 15px 0;
+      font-size: 16px;
+      color: #2e7d32;
+      text-align: center;
+    }
+    .world-clock {
+      margin-top: 25px;
+      padding: 10px;
+      border-top: 1px solid #a5d6a7;
+    }
+    .clock {
+      display: flex;
+      justify-content: space-between;
+      padding: 5px 0;
+    }
     .autocomplete-suggestions {
       border: 1px solid #a5d6a7;
       border-radius: 8px;
@@ -84,11 +100,19 @@
     .autocomplete-suggestions div:hover {
       background: #c8e6c9;
     }
+    @media (max-width: 600px) {
+      .container {
+        margin: 15px;
+        padding: 15px;
+      }
+    }
   </style>
 </head>
 <body>
   <div class="container">
     <h2>Advanced Time Zone Converter</h2>
+
+    <div class="current-time" id="currentTimeFromZone"></div>
 
     <label for="date">Select Date:</label>
     <input type="date" id="date">
@@ -111,19 +135,32 @@
     <button id="swapButton" class="swap-button">Swap Time Zones</button>
 
     <div class="result" id="result"></div>
+
+    <div class="world-clock" id="worldClock">
+      <h3>🌍 World Clock</h3>
+    </div>
   </div>
 
   <script>
-    const API_KEY = "RKUS3G225UPZ"; // Your TimeZoneDB API key
+    const API_KEY = "RKUS3G225UPZ";
     let zonesList = [];
     let fromZone = null;
     let toZone = null;
 
-    // Fetch all zones once
+    const worldCities = [
+      "America/New_York",
+      "Europe/London",
+      "Europe/Rome",
+      "Asia/Colombo",
+      "Australia/Sydney",
+      "Asia/Tokyo"
+    ];
+
+    // Load all zones from TimeZoneDB
     async function loadZones() {
       try {
-        const response = await fetch(`https://api.timezonedb.com/v2.1/list-time-zone?key=${API_KEY}&format=json`);
-        const data = await response.json();
+        const res = await fetch(`https://api.timezonedb.com/v2.1/list-time-zone?key=${API_KEY}&format=json`);
+        const data = await res.json();
         if (data.status === "OK") {
           zonesList = data.zones.map(z => ({
             zoneName: z.zoneName,
@@ -131,27 +168,25 @@
             country: z.countryName
           }));
         }
-      } catch (err) {
-        console.error("Failed to load zones:", err);
+      } catch (e) {
+        console.error("Failed to load zones:", e);
       }
     }
 
-    // Show autocomplete
-    function showSuggestions(inputEl, suggestionsEl, setZoneCallback) {
+    // Autocomplete
+    function showSuggestions(inputEl, suggestionsEl, setZone) {
       const val = inputEl.value.toLowerCase();
       suggestionsEl.innerHTML = "";
       if (!val) return;
-
       const matches = zonesList.filter(z =>
         z.city.toLowerCase().includes(val) || z.country.toLowerCase().includes(val)
-      ).slice(0, 10); // limit to 10
-
+      ).slice(0, 8);
       matches.forEach(z => {
         const div = document.createElement("div");
         div.textContent = `${z.city}, ${z.country}`;
         div.onclick = () => {
           inputEl.value = `${z.city}, ${z.country}`;
-          setZoneCallback(z.zoneName);
+          setZone(z.zoneName);
           suggestionsEl.innerHTML = "";
           convertTime();
         };
@@ -159,19 +194,16 @@
       });
     }
 
-    // Helpers for conversion
-    function getTzOffsetMinutesAt(instant, timeZone) {
+    // Conversion helpers
+    function getOffsetMinutes(date, zone) {
       const dtf = new Intl.DateTimeFormat("en-US", {
-        timeZone,
+        timeZone: zone,
         timeZoneName: "shortOffset",
-        year: "numeric", month: "2-digit", day: "2-digit",
-        hour: "2-digit", minute: "2-digit", hour12: false
+        hour: "2-digit", minute: "2-digit"
       });
-      const parts = dtf.formatToParts(instant);
-      const tzPart = parts.find(p => p.type === "timeZoneName");
-      const m = tzPart && tzPart.value.match(/GMT|UTC([+-]\d{1,2})(?::?(\d{2}))?/);
-      const m2 = tzPart && tzPart.value.match(/([+-]\d{1,2})(?::(\d{2}))?/);
-      const match = m || m2;
+      const parts = dtf.formatToParts(date);
+      const tz = parts.find(p => p.type === "timeZoneName").value;
+      const match = tz.match(/([+-]\d{1,2})(?::(\d{2}))?/);
       if (!match) return 0;
       const sign = match[1].startsWith("-") ? -1 : 1;
       const hours = Math.abs(parseInt(match[1], 10));
@@ -179,88 +211,90 @@
       return sign * (hours * 60 + mins);
     }
 
-    function wallTimeToInstant(dateStr, timeStr, fromZone) {
+    function wallTimeToInstant(dateStr, timeStr, zone) {
       const [y, m, d] = dateStr.split("-").map(Number);
       const [hh, mm] = timeStr.split(":").map(Number);
-      let utcMs = Date.UTC(y, m - 1, d, hh, mm);
+      let utc = Date.UTC(y, m - 1, d, hh, mm);
       for (let i = 0; i < 2; i++) {
-        const offsetMin = getTzOffsetMinutesAt(new Date(utcMs), fromZone);
-        const nextUtc = Date.UTC(y, m - 1, d, hh, mm) - offsetMin * 60_000;
-        if (Math.abs(nextUtc - utcMs) < 1000) break;
-        utcMs = nextUtc;
+        const off = getOffsetMinutes(new Date(utc), zone);
+        const next = Date.UTC(y, m - 1, d, hh, mm) - off * 60_000;
+        if (Math.abs(next - utc) < 1000) break;
+        utc = next;
       }
-      return new Date(utcMs);
+      return new Date(utc);
     }
 
     function convertTime() {
       const dateValue = document.getElementById("date").value;
       const timeValue = document.getElementById("time").value;
-
       if (!fromZone || !toZone || !dateValue || !timeValue) {
-        document.getElementById("result").innerHTML =
-          "Please select a date, time, and both cities.";
+        document.getElementById("result").innerHTML = "Please select both cities, date, and time.";
         return;
       }
-
       try {
         const instant = wallTimeToInstant(dateValue, timeValue, fromZone);
-
-        const targetOptions = {
+        const targetTime = instant.toLocaleString("en-US", {
           timeZone: toZone,
-          hour: "2-digit",
-          minute: "2-digit",
-          hour12: true,
-          weekday: "short",
-          year: "numeric",
-          month: "short",
-          day: "numeric"
-        };
-        const targetTime = instant.toLocaleString("en-US", targetOptions);
-
-        const fromOffset = getTzOffsetMinutesAt(instant, fromZone);
-        const toOffset = getTzOffsetMinutesAt(instant, toZone);
-        const diffHours = (toOffset - fromOffset) / 60;
-        const diffText =
-          (diffHours > 0 ? `+${diffHours.toFixed(1)}` : diffHours.toFixed(1)) + " hrs";
-
-        const targetHour = parseInt(
-          new Intl.DateTimeFormat("en-US", { timeZone: toZone, hour12: false, hour: "numeric" }).format(instant),
-          10
-        );
+          hour: "2-digit", minute: "2-digit",
+          hour12: true, weekday: "short", year: "numeric", month: "short", day: "numeric"
+        });
+        const fromOff = getOffsetMinutes(instant, fromZone);
+        const toOff = getOffsetMinutes(instant, toZone);
+        const diff = ((toOff - fromOff) / 60).toFixed(1);
+        const targetHour = parseInt(new Intl.DateTimeFormat("en-US", {
+          timeZone: toZone, hour12: false, hour: "numeric"
+        }).format(instant));
         const dayNight = targetHour >= 6 && targetHour < 18 ? "Day 🌞" : "Night 🌜";
-
         document.getElementById("result").innerHTML =
-          `⏰ <b>${targetTime}</b> in <b>${toZone}</b> (${dayNight}) <br>Time Difference: ${diffText}`;
+          `⏰ <b>${targetTime}</b> in <b>${toZone}</b> (${dayNight}) <br>Time Difference: ${diff} hrs`;
       } catch (e) {
+        document.getElementById("result").innerHTML = "❌ Conversion error.";
         console.error(e);
-        document.getElementById("result").innerHTML =
-          "❌ Conversion error. Please check the cities.";
       }
+    }
+
+    function updateCurrentTime() {
+      if (!fromZone) return;
+      const now = new Date();
+      const current = now.toLocaleString("en-US", {
+        timeZone: fromZone,
+        hour: "2-digit", minute: "2-digit", second: "2-digit",
+        weekday: "short", year: "numeric", month: "short", day: "numeric"
+      });
+      document.getElementById("currentTimeFromZone").innerHTML =
+        `🕒 Current time in <b>${fromZone}</b>: ${current}`;
+    }
+
+    function updateWorldClock() {
+      const clockDiv = document.getElementById("worldClock");
+      clockDiv.innerHTML = "<h3>🌍 World Clock</h3>";
+      worldCities.forEach(city => {
+        const now = new Date();
+        const time = now.toLocaleTimeString("en-US", { timeZone: city, hour: "2-digit", minute: "2-digit", hour12: true });
+        const hour = parseInt(new Intl.DateTimeFormat("en-US", { timeZone: city, hour12: false, hour: "numeric" }).format(now));
+        const dn = hour >= 6 && hour < 18 ? "Day 🌞" : "Night 🌜";
+        const div = document.createElement("div");
+        div.className = "clock";
+        div.innerHTML = `<span>${city}</span><span>${time} (${dn})</span>`;
+        clockDiv.appendChild(div);
+      });
     }
 
     function swapTimeZones() {
-      const temp = fromZone;
-      fromZone = toZone;
-      toZone = temp;
-
+      [fromZone, toZone] = [toZone, fromZone];
       const fromInput = document.getElementById("fromCity");
       const toInput = document.getElementById("toCity");
-      const tempVal = fromInput.value;
-      fromInput.value = toInput.value;
-      toInput.value = tempVal;
-
+      [fromInput.value, toInput.value] = [toInput.value, fromInput.value];
       convertTime();
     }
 
-    // Attach autocomplete listeners
-    document.getElementById("fromCity").addEventListener("input", (e) => {
-      showSuggestions(e.target, document.getElementById("fromSuggestions"), (z) => fromZone = z);
+    // Listeners
+    document.getElementById("fromCity").addEventListener("input", e => {
+      showSuggestions(e.target, document.getElementById("fromSuggestions"), z => fromZone = z);
     });
-
-    document.getElementById("toCity").addEventListener("input", (e) => {
-      showSuggestions(e.target, document.getElementById("toSuggestions"), (z) => toZone = z);
+    document.getElementById("toCity").addEventListener("input", e => {
+      showSuggestions(e.target, document.getElementById("toSuggestions"), z => toZone = z);
     });
-
     document.getElementById("date").addEventListener("input", convertTime);
     document.getElementById("time").addEventListener("input", convertTime);
     document.getElementById("swapButton").addEventListener("click", swapTimeZones);
@@ -270,10 +304,14 @@
       await loadZones();
       document.getElementById("date").valueAsDate = new Date();
       document.getElementById("time").value = new Date().toLocaleTimeString("en-US", {
-        hour: "2-digit",
-        minute: "2-digit",
-        hour12: false
+        hour: "2-digit", minute: "2-digit", hour12: false
       });
+      const localZone = Intl.DateTimeFormat().resolvedOptions().timeZone;
+      fromZone = localZone;
+      document.getElementById("fromCity").value = localZone;
+      setInterval(updateCurrentTime, 1000);
+      setInterval(updateWorldClock, 1000);
+      updateWorldClock();
     };
   </script>
 </body>
